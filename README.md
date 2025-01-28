@@ -11,7 +11,7 @@ A powerful question-answering system that processes documentation websites and p
 - Source attribution and context preservation
 - Beautiful CLI interface with progress tracking
 - Detailed retrieval analysis for transparency
-- Uses OpenAI's text-embedding-3-small for embeddings and GPT-4 for text generation
+- Uses OpenAI's text-embedding-3-small for embeddings and GPT-40-mini for text generation
 
 ## Technical Architecture
 
