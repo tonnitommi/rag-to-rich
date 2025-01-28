@@ -4,37 +4,52 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.markdown import Markdown
 from rich.prompt import Prompt
-from rich.table import Table
+from rich.table import Table, Column
 from rich.status import Status
 from rich.spinner import Spinner
 import time
+from typing import List, Dict, Any
+from rich.layout import Layout
+from rich import box
 
 console = Console()
 
-def format_retrieval_analysis(question: str, chunks: list) -> Table:
-    """Create a table showing the retrieval analysis."""
+def format_retrieval_analysis(question: str, retrieved_chunks: List[Dict[str, Any]], query_variations: List[str] = None) -> Table:
+    """Format the retrieval analysis results into a nice table."""
     table = Table(
-        title="[bold yellow]Retrieval Analysis[/]",
-        caption="How the answer was found",
-        show_header=True,
-        header_style="bold magenta"
+        Column("Source", style="blue", no_wrap=True),
+        Column("Heading Path", style="cyan", no_wrap=True),
+        Column("Content Preview", style="white", width=80),
+        Column("Similarity", style="green", justify="right")
     )
-    
-    table.add_column("Score", justify="right", style="cyan", no_wrap=True)
-    table.add_column("Path", style="blue")
-    table.add_column("Content Preview", style="green")
-    
-    # Sort chunks by similarity score
-    sorted_chunks = sorted(chunks, key=lambda x: x.get('similarity', 0), reverse=True)
-    
-    for chunk in sorted_chunks:
-        similarity = chunk.get('similarity', 0) * 100
-        # Truncate content preview to ~100 chars and add ellipsis
-        content_preview = chunk['chunk_text'][:100] + ('...' if len(chunk['chunk_text']) > 100 else '')
+
+    # Add query variations if available
+    if query_variations:
+        variations_table = Table(
+            "Query Variations",
+            title_style="bold magenta",
+            box=box.ROUNDED,
+            show_header=True,
+            header_style="bold magenta"
+        )
+        for variation in query_variations:
+            variations_table.add_row(variation)
+        console.print(variations_table)
+        console.print()
+
+    for chunk in retrieved_chunks:
+        # Format the content preview - show more context but keep it readable
+        content_preview = chunk['chunk_text'][:300] + ('...' if len(chunk['chunk_text']) > 300 else '')
+        
+        # Format similarity as percentage
+        similarity_pct = f"{chunk['similarity'] * 100:.1f}%"
+        
+        # Add row to table
         table.add_row(
-            f"{similarity:.1f}%",
-            chunk['heading_path'] or "No path",
-            content_preview
+            chunk['url'].replace('https://sema4.ai/docs/', ''),  # Simplify URL
+            chunk['heading_path'],
+            content_preview,
+            similarity_pct
         )
     
     return table
@@ -42,7 +57,8 @@ def format_retrieval_analysis(question: str, chunks: list) -> Table:
 def process_question(qa_agent: QAAgent, question: str) -> dict:
     """Process a question with a nice progress spinner."""
     steps = [
-        ("🔍 Generating embeddings for your question...", 0.5),
+        ("🔍 Generating query variations...", 0.3),
+        ("🔍 Generating embeddings...", 0.5),
         ("🔎 Searching through documents...", 0.7),
         ("🤔 Analyzing relevant passages...", 0.8),
         ("✍️ Composing the answer...", 1.0)
@@ -109,7 +125,11 @@ def main():
                 # Display retrieval analysis
                 console.print("\n[bold]Understanding the Answer[/]")
                 console.print("The answer was generated using these relevant sections from the documentation:")
-                console.print(format_retrieval_analysis(question, result["retrieved_chunks"]))
+                console.print(format_retrieval_analysis(
+                    question, 
+                    result["retrieved_chunks"],
+                    result.get("query_variations")
+                ))
 
             except KeyboardInterrupt:
                 console.print("\n[bold yellow]Interrupted by user. Type 'exit' to quit.[/]")

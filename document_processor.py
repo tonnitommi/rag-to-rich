@@ -69,18 +69,22 @@ class DocumentProcessor:
                 print(f"    Found next heading: {current.get_text()[:30]}...")
                 break
                 
+            # Handle text nodes
             if isinstance(current, str):
                 cleaned_text = current.strip()
                 if cleaned_text:  # Only count non-empty strings
                     section_text += cleaned_text + " "
                     text_blocks += 1
                     print(f"    Added text block {text_blocks}: {cleaned_text[:50]}...")
-            elif current.name in ['p', 'li', 'div']:
-                cleaned_text = current.get_text().strip()
-                if cleaned_text:  # Only count non-empty blocks
-                    section_text += cleaned_text + " "
-                    text_blocks += 1
-                    print(f"    Added {current.name} block {text_blocks}: {cleaned_text[:50]}...")
+            # Handle HTML elements
+            elif current.name:
+                # Get all text from this element and its descendants
+                for text in current.stripped_strings:
+                    cleaned_text = text.strip()
+                    if cleaned_text:
+                        section_text += cleaned_text + " "
+                        text_blocks += 1
+                        print(f"    Added {current.name} block {text_blocks}: {cleaned_text[:50]}...")
             
             sibling_count += 1
             current = current.next_sibling
@@ -173,7 +177,35 @@ class DocumentProcessor:
             # Sort headings by their position in the document
             all_headings.sort(key=lambda x: str(x.sourceline))
             print(f"Found {len(all_headings)} total headings")
-            
+
+            # Handle text before first heading
+            if all_headings:
+                first_heading = all_headings[0]
+                intro_text = ""
+                current = first_heading.previous_sibling
+                while current:
+                    if isinstance(current, str):
+                        intro_text = current.strip() + " " + intro_text
+                    elif current.name:
+                        for text in current.stripped_strings:
+                            intro_text = text.strip() + " " + intro_text
+                    current = current.previous_sibling
+                
+                if intro_text.strip():
+                    print("\n  Processing introduction section...")
+                    text_chunks = self.create_chunks_from_text(intro_text.strip())
+                    for chunk_text in text_chunks:
+                        chunks.append(DocumentChunk(
+                            url=url,
+                            title=title,
+                            content=html_content,
+                            chunk_index=chunk_index,
+                            chunk_text=chunk_text,
+                            heading_path="Introduction"
+                        ))
+                        chunk_index += 1
+
+            # Process each heading section
             for section in all_headings:
                 heading_text = section.get_text().strip()
                 if heading_text:
@@ -213,6 +245,33 @@ class DocumentProcessor:
                         heading_path=heading_path
                     ))
                     chunk_index += 1
+
+            # Handle text after last heading
+            if all_headings:
+                last_heading = all_headings[-1]
+                conclusion_text = ""
+                current = last_heading.next_sibling
+                while current:
+                    if isinstance(current, str):
+                        conclusion_text += current.strip() + " "
+                    elif current.name:
+                        for text in current.stripped_strings:
+                            conclusion_text += text.strip() + " "
+                    current = current.next_sibling
+                
+                if conclusion_text.strip():
+                    print("\n  Processing conclusion section...")
+                    text_chunks = self.create_chunks_from_text(conclusion_text.strip())
+                    for chunk_text in text_chunks:
+                        chunks.append(DocumentChunk(
+                            url=url,
+                            title=title,
+                            content=html_content,
+                            chunk_index=chunk_index,
+                            chunk_text=chunk_text,
+                            heading_path="Conclusion"
+                        ))
+                        chunk_index += 1
 
             print(f"\nFinished processing {url}")
             print(f"Created {len(chunks)} total chunks")
